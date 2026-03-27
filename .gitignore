@@ -1,12 +1,10 @@
- # CSV files
-*.csv
+# CSV files
+
 
 # JSON files
-*.json
 
 # JPEG files
-*.jpg
-*.jpeg
+
 
 *.DS_Store
 

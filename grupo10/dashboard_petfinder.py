@@ -1,13 +1,10 @@
-# Para ejecutar: streamlit run dashboard_petfinder.py
-# Asegurarse de correr desde la carpeta grupo10/ o ajustar BASE_PATH
+
 
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 import os
-import json
 import warnings
 from io import BytesIO
 
@@ -22,7 +19,7 @@ st.set_page_config(
     layout="wide",
 )
 
-BASE_PATH = '../input/petfinder-adoption-prediction'
+BASE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'input', 'petfinder-adoption-prediction')
 
 # Paleta de colores consistente para AdoptionSpeed
 SPEED_COLORS = {
@@ -100,34 +97,6 @@ def load_data():
         (train['Health']     == 1).astype(int)
     )
 
-    # ── Sentimiento ───────────────────────────
-    sentiment_path = f'{BASE_PATH}/train_sentiment'
-    records = []
-    if os.path.isdir(sentiment_path):
-        for fname in os.listdir(sentiment_path):
-            if fname.endswith('.json'):
-                pet_id = fname.replace('.json', '')
-                try:
-                    with open(os.path.join(sentiment_path, fname), 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                    ds = data.get('documentSentiment', {})
-                    records.append({
-                        'PetID'              : pet_id,
-                        'sent_score'         : ds.get('score', np.nan),
-                        'sent_magnitude'     : ds.get('magnitude', np.nan),
-                        'sent_num_sentences' : len(data.get('sentences', [])),
-                        'sent_num_entities'  : len(data.get('entities', [])),
-                    })
-                except Exception:
-                    pass
-
-    if records:
-        sent_df = pd.DataFrame(records)
-        train = train.merge(sent_df, on='PetID', how='left')
-    else:
-        for col in ['sent_score', 'sent_magnitude', 'sent_num_sentences', 'sent_num_entities']:
-            train[col] = np.nan
-
     # Etiqueta legible para AdoptionSpeed
     train['Speed_label'] = train['AdoptionSpeed'].map(SPEED_LABELS)
 
@@ -194,7 +163,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Características",
     "Geografía",
     "Media y Fee",
-    "Texto y Sentimiento",
+    "Texto",
 ])
 
 # ══════════════════════════════════════════════
@@ -316,6 +285,60 @@ with tab2:
         labels={'x': 'AdoptionSpeed', 'y': cat_sel, 'color': 'Proporción'},
     )
     st.plotly_chart(fig_heat, use_container_width=True)
+
+    st.divider()
+
+    # Género: distribución y AdoptionSpeed
+    st.subheader("Género: Distribución y AdoptionSpeed")
+    col_g1, col_g2 = st.columns(2)
+
+    with col_g1:
+        gender_counts = df['Gender_name'].value_counts().reset_index()
+        gender_counts.columns = ['Género', 'Count']
+        fig_gender_pie = px.pie(
+            gender_counts,
+            names='Género',
+            values='Count',
+            color='Género',
+            color_discrete_map={'Macho': '#3498db', 'Hembra': '#e74c3c', 'Mixto': '#f39c12'},
+            title='Distribución por Género',
+        )
+        st.plotly_chart(fig_gender_pie, use_container_width=True)
+
+    with col_g2:
+        gender_speed = (
+            df.groupby('Gender_name')['AdoptionSpeed']
+              .mean()
+              .reset_index()
+              .rename(columns={'Gender_name': 'Género', 'AdoptionSpeed': 'AdoptionSpeed Promedio'})
+        )
+        fig_gender_speed = px.bar(
+            gender_speed,
+            x='Género',
+            y='AdoptionSpeed Promedio',
+            color='Género',
+            color_discrete_map={'Macho': '#3498db', 'Hembra': '#e74c3c', 'Mixto': '#f39c12'},
+            text='AdoptionSpeed Promedio',
+            title='AdoptionSpeed promedio por Género (menor = más rápido)',
+        )
+        fig_gender_speed.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+        fig_gender_speed.update_layout(showlegend=False, yaxis_range=[0, 4])
+        st.plotly_chart(fig_gender_speed, use_container_width=True)
+
+    # Heatmap género × AdoptionSpeed por tipo de animal
+    gender_cross = pd.crosstab(
+        df['Gender_name'], df['AdoptionSpeed'], normalize='index'
+    ) * 100
+    gender_cross.columns = [SPEED_LABELS[c] for c in gender_cross.columns]
+    fig_gender_heat = px.imshow(
+        gender_cross,
+        text_auto='.1f',
+        color_continuous_scale='RdYlGn_r',
+        aspect='auto',
+        title='Género × AdoptionSpeed (% por fila)',
+        labels={'x': 'AdoptionSpeed', 'y': 'Género', 'color': '%'},
+    )
+    st.plotly_chart(fig_gender_heat, use_container_width=True)
 
     st.divider()
 
@@ -465,7 +488,7 @@ with tab4:
 # PESTAÑA 5 — TEXTO Y SENTIMIENTO
 # ══════════════════════════════════════════════
 with tab5:
-    st.header("Análisis de Texto y Sentimiento")
+    st.header("Análisis de Texto")
 
     # WordCloud
     st.subheader("Nube de palabras — Descripciones")
@@ -516,43 +539,3 @@ with tab5:
     )
     st.plotly_chart(fig_desc, use_container_width=True)
 
-    st.divider()
-
-    # Scatter sent_score vs sent_magnitude
-    st.subheader("Sentimiento: Score vs Magnitud")
-    df_sent = df.dropna(subset=['sent_score', 'sent_magnitude']).copy()
-    if len(df_sent) > 2000:
-        df_sent = df_sent.sample(2000, random_state=42)
-    df_sent['Speed_label'] = df_sent['AdoptionSpeed'].map(SPEED_LABELS)
-    fig_scatter = px.scatter(
-        df_sent,
-        x='sent_score',
-        y='sent_magnitude',
-        color='AdoptionSpeed',
-        color_discrete_map=SPEED_COLORS,
-        hover_data=['PetID', 'Speed_label'],
-        opacity=0.6,
-        labels={
-            'sent_score'    : 'Score de sentimiento',
-            'sent_magnitude': 'Magnitud de sentimiento',
-            'AdoptionSpeed' : 'Speed',
-        },
-        title='Sentimiento: Score vs Magnitud (muestra 2000 puntos)',
-    )
-    st.plotly_chart(fig_scatter, use_container_width=True)
-
-    # Boxplot sent_score por AdoptionSpeed
-    st.subheader("Score de sentimiento por AdoptionSpeed")
-    df_box_sent = df.dropna(subset=['sent_score']).copy()
-    df_box_sent['Speed_label'] = df_box_sent['AdoptionSpeed'].map(SPEED_LABELS)
-    fig_box_sent = px.box(
-        df_box_sent,
-        x='Speed_label',
-        y='sent_score',
-        color='AdoptionSpeed',
-        color_discrete_map=SPEED_COLORS,
-        labels={'Speed_label': 'AdoptionSpeed', 'sent_score': 'Score de sentimiento'},
-        title='Score de sentimiento por AdoptionSpeed',
-    )
-    fig_box_sent.update_layout(showlegend=False)
-    st.plotly_chart(fig_box_sent, use_container_width=True)

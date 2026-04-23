@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show *)",
+      "Bash(conda env *)",
+      "Bash(jupyter kernelspec *)",
+      "Bash(\"C:\\\\Users\\\\Hp EliteBook\\\\miniconda3\\\\python.exe\" -m pip install lightgbm)",
+      "Bash(conda run *)"
+    ]
+  }
+}

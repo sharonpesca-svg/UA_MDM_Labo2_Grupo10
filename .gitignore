@@ -13,3 +13,5 @@
 *.joblib
 
 /work/optuna_artifacts/
+
+/work/optuna_temp_artifacts/

@@ -10,7 +10,7 @@
 
 # *.sqlite3
 
-*.joblib
+#*.joblib
 
 /work/optuna_artifacts/
 

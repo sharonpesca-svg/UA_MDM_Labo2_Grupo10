@@ -15,3 +15,8 @@
 /work/optuna_artifacts/
 
 /work/optuna_temp_artifacts/
+
+
+work/optuna_temp_artifacts/
+
+*.pth
